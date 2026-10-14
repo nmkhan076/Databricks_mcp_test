@@ -1,0 +1,76 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OpenFDA MCP Explorer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+          rel="stylesheet">
+</head>
+
+<body class="bg-light">
+<div class="container py-5">
+
+    <h2>OpenFDA Drug Explorer</h2>
+    <p class="text-muted">
+        Flask interface connected to Databricks MCP
+    </p>
+
+    <div class="card p-4 mb-4">
+        <form method="POST">
+            <label class="form-label">
+                Enter drug brand name
+            </label>
+
+            <input type="text"
+                   name="drug_name"
+                   class="form-control mb-3"
+                   value="{{ drug_name }}"
+                   placeholder="OxyContin">
+
+            <button class="btn btn-primary">
+                Search Drug
+            </button>
+        </form>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-danger">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    {% if drug_data %}
+    <div class="card p-4">
+        <h4>FDA Drug Label Results</h4>
+
+        {% for item in drug_data.get("results", []) %}
+            <h5 class="mt-3">
+                {{ item.get("openfda", {}).get(
+                    "brand_name", ["Unknown"]
+                ) | join(", ") }}
+            </h5>
+
+            <p><strong>Generic Name:</strong>
+                {{ item.get("openfda", {}).get(
+                    "generic_name", ["Unknown"]
+                ) | join(", ") }}
+            </p>
+
+            <h6>Boxed Warning</h6>
+            <p>
+                {{ item.get("boxed_warning",
+                    ["Not provided"])[0] }}
+            </p>
+
+            <h6>Adverse Reactions</h6>
+            <p>
+                {{ item.get("adverse_reactions",
+                    ["Not provided"])[0] }}
+            </p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+</div>
+</body>
+</html>
