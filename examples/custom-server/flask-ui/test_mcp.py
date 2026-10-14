@@ -45,6 +45,23 @@ async def main():
                 print("Exception type:", type(exc).__name__)
                 print("Exception message:", str(exc))
                 raise
+            print("Calling search_opioid_label_updates...")
+            try:
+                result = await session.call_tool(
+                "search_opioid_label_updates",
+                {
+                    "query": "respiratory depression and overdose",
+                    "top_k": 3
+                    }
+                )
+            except:
+                print("TOOL search_opioid_label_updates CALL FAILED")
+
+            print("ERROR:", result.is_error)
+
+            for item in result.content:
+                if item.type == "text":
+                    print(item.text)
 
 if __name__ == "__main__":
     asyncio.run(main())
