@@ -1,7 +1,9 @@
 
 import asyncio
+import json
 import os
 import traceback
+
 from flask import Flask, render_template, request
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
@@ -16,10 +18,12 @@ MCP_URL = os.getenv(
 
 async def fetch_drug(drug_name):
     async with streamable_http_client(MCP_URL) as (
-        read_stream, write_stream
+        read_stream,
+        write_stream
     ):
         async with ClientSession(
-            read_stream, write_stream
+            read_stream,
+            write_stream
         ) as session:
 
             await session.initialize()
@@ -29,14 +33,34 @@ async def fetch_drug(drug_name):
                 {"drug_name": drug_name}
             )
 
-            if result.isError:
-                raise RuntimeError(str(result.content))
+            if result.is_error:
+                raise RuntimeError(
+                    str(result.content)
+                )
 
-            if result.structuredContent:
-                return result.structuredContent
+            # Your MCP server returns TextContent
+            if result.structured_content is not None:
+                data = result.structured_content
+            else:
+                text_blocks = [
+                    block.text
+                    for block in result.content
+                    if block.type == "text"
+                ]
 
-            import json
-            return json.loads(result.content[0].text)
+                if not text_blocks:
+                    raise ValueError(
+                        "MCP returned no text response"
+                    )
+
+                data = json.loads(text_blocks[0])
+
+            if not isinstance(data, dict):
+                raise ValueError(
+                    "Expected a JSON object from MCP"
+                )
+
+            return data
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -57,10 +81,21 @@ def home():
                 drug_data = asyncio.run(
                     fetch_drug(drug_name)
                 )
-            except Exception as exc:
-                error = str(exc)
+
+                if not drug_data.get("success", False):
+                    error = drug_data.get(
+                        "error",
+                        "Drug information unavailable."
+                    )
+                    drug_data = None
+
+            except Exception:
                 traceback.print_exc()
-                # error = str(error)
+                error = (
+                    "Unable to retrieve drug information. "
+                    "Check the Flask terminal for details."
+                )
+
     return render_template(
         "index.html",
         drug_data=drug_data,

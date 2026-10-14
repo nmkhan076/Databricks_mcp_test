@@ -3,6 +3,7 @@ from pathlib import Path
 from mcp.server.mcpserver import MCPServer as FastMCP
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from requests.exceptions import RequestException
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -18,29 +19,70 @@ def add(a: int, b: int) -> int:
 @mcp.tool()
 def echo(msg: str) -> str:
     return msg
+
 @mcp.tool()
 def get_drug_label(drug_name: str) -> dict:
-    """
-    Retrieve FDA drug labeling information from openFDA
-    for a given drug brand name.
-    """
+    """Retrieve FDA labeling information by drug brand name."""
 
     url = "https://api.fda.gov/drug/label.json"
 
     params = {
-        "search": f'openfda.brand_name:"{drug_name}"',
-        "limit": 1,
+        "search": f'openfda.brand_name:"{drug_name.strip()}"',
+        "limit": 1
     }
 
-    response = requests.get(
-        url,
-        params=params,
-        timeout=30,
-    )
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            timeout=30
+        )
 
-    response.raise_for_status()
+        print("OpenFDA URL:", response.url)
+        print("Status code:", response.status_code)
 
-    return response.json()
+        response.raise_for_status()
+
+        data = response.json()
+        results = data.get("results", [])
+
+        if not results:
+            return {
+                "success": False,
+                "error": "No drug labeling records found."
+            }
+
+        label = results[0]
+        openfda = label.get("openfda", {})
+
+        return {
+            "success": True,
+            "brand_name": openfda.get("brand_name", []),
+            "generic_name": openfda.get("generic_name", []),
+            "manufacturer": openfda.get(
+                "manufacturer_name", []
+            ),
+            "boxed_warning": label.get(
+                "boxed_warning", []
+            ),
+            "warnings": label.get("warnings", []),
+            "adverse_reactions": label.get(
+                "adverse_reactions", []
+            )
+        }
+
+    except RequestException as exc:
+        return {
+            "success": False,
+            "error": f"OpenFDA request failed: {exc}"
+        }
+
+    except ValueError as exc:
+        return {
+            "success": False,
+            "error": f"Invalid JSON response: {exc}"
+        }
+
 # Add a dynamic greeting resource
 @mcp.resource("greeting://{name}")
 def get_greeting(name: str) -> str:

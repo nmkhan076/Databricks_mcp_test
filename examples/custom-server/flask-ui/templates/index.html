@@ -39,37 +39,51 @@
     </div>
     {% endif %}
 
-    {% if drug_data %}
+
+{% if drug_data %}
+
+    {% if drug_data.get("success") %}
+
     <div class="card p-4">
-        <h4>FDA Drug Label Results</h4>
 
-        {% for item in drug_data.get("results", []) %}
-            <h5 class="mt-3">
-                {{ item.get("openfda", {}).get(
-                    "brand_name", ["Unknown"]
-                ) | join(", ") }}
-            </h5>
+        <h4>FDA Drug Label</h4>
 
-            <p><strong>Generic Name:</strong>
-                {{ item.get("openfda", {}).get(
-                    "generic_name", ["Unknown"]
-                ) | join(", ") }}
-            </p>
+        <p>
+            <strong>Brand:</strong>
+            {{ drug_data.get("brand_name", []) | join(", ") }}
+        </p>
 
-            <h6>Boxed Warning</h6>
-            <p>
-                {{ item.get("boxed_warning",
-                    ["Not provided"])[0] }}
-            </p>
+        <p>
+            <strong>Generic Name:</strong>
+            {{ drug_data.get("generic_name", []) | join(", ") }}
+        </p>
 
-            <h6>Adverse Reactions</h6>
-            <p>
-                {{ item.get("adverse_reactions",
-                    ["Not provided"])[0] }}
-            </p>
+        <h5>Boxed Warning</h5>
+        {% for warning in drug_data.get("boxed_warning", []) %}
+            <p>{{ warning }}</p>
+        {% else %}
+            <p>No boxed warning field available.</p>
         {% endfor %}
+
+        <h5>Adverse Reactions</h5>
+        {% for reaction in drug_data.get("adverse_reactions", []) %}
+            <p>{{ reaction }}</p>
+        {% else %}
+            <p>No adverse reactions field available.</p>
+        {% endfor %}
+
     </div>
+
+    {% else %}
+
+    <div class="alert alert-warning">
+        {{ drug_data.get("error", "Unknown error") }}
+    </div>
+
     {% endif %}
+
+{% endif %}
+
 
 </div>
 </body>
