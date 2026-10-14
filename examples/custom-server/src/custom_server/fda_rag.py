@@ -61,31 +61,73 @@ def download_pdf():
 
 
 def download_webpage():
-    response = requests.get(WEB_URL, timeout=45)
+    """Scrape the FDA Opioid Medications webpage."""
+
+    headers = {
+        "User-Agent": "FDA-Research-RAG/1.0",
+        "Accept": "text/html"
+    }
+
+    response = requests.get(
+        WEB_URL,
+        headers=headers,
+        timeout=30
+    )
+
+    print("Requested URL:", WEB_URL)
+    print("Final URL:", response.url)
+    print("HTTP status:", response.status_code)
+
     response.raise_for_status()
 
-    soup = BeautifulSoup(response.text, "html.parser")
+    # Detect FDA website protection redirects
+    if (
+        "abuse-detection" in response.url.lower()
+        or "apology_objects" in response.url.lower()
+    ):
+        raise RuntimeError(
+            "FDA blocked automated webpage access. "
+            "Cannot safely scrape this page."
+        )
+
+    soup = BeautifulSoup(
+        response.text,
+        "html.parser"
+    )
 
     main = (
         soup.find("main")
         or soup.find("article")
-        or soup
     )
 
+    if main is None:
+        raise ValueError(
+            "FDA article content could not be located."
+        )
+
+    # Remove non-article content
     for element in main.select(
-        "script, style, nav, footer, header, form"
+        "script, style, nav, footer, header, form, aside"
     ):
         element.decompose()
 
-    # Focus on FDA article paragraphs and headings.
+    # Extract paragraphs and headings
     elements = main.find_all(
         ["h1", "h2", "h3", "p", "li"]
     )
 
-    text = "\n".join(
+    paragraphs = [
         element.get_text(" ", strip=True)
         for element in elements
-    )
+        if element.get_text(" ", strip=True)
+    ]
+
+    text = "\n".join(paragraphs)
+
+    if len(text) < 200:
+        raise ValueError(
+            "Insufficient FDA article content extracted."
+        )
 
     chunks = []
 
@@ -98,7 +140,10 @@ def download_webpage():
             "title": "FDA Opioid Medications"
         })
 
+    print("Webpage chunks created:", len(chunks))
+
     return chunks
+
 
 
 @lru_cache(maxsize=2)
