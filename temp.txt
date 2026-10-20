@@ -1,0 +1,127 @@
+import json
+import requests
+from datetime import datetime
+
+def get_oxycontin_set_id(drug_name="OxyContin"):
+    """Step 1: Retrieve the master set_id for the drug from openFDA."""
+    base_url = https://api.fda.gov/drug/label.json
+    params = {
+        "search": f'openfda.brand_name:"{drug_name}"',
+        "limit": 1
+    }
+    response = requests.get(base_url, params=params)
+    response.raise_for_status()
+    data = response.json()
+    
+    if data.get("results"):
+        return data["results"][0].get("set_id")
+    return None
+
+def fetch_label_history(set_id):
+    """Step 2: Fetch all historical revisions associated with the set_id."""
+    base_url = https://api.fda.gov/drug/label.json
+    params = {
+        "search": f'set_id:"{set_id}"',
+        "limit": 100
+    }
+    
+    response = requests.get(base_url, params=params)
+    response.raise_for_status()
+    data = response.json()
+    
+    results = data.get("results", [])
+    
+    # Sort chronologically by effective_time (YYYYMMDD)
+    sorted_history = sorted(
+        results,
+        key=lambda x: x.get("effective_time", "00000000")
+    )
+    return sorted_history
+
+def format_fda_date(date_str):
+    """Converts FDA YYYYMMDD string to human-readable date format."""
+    if not date_str or len(date_str) < 8:
+        return "Unknown Date"
+    try:
+        return datetime.strptime(date_str[:8], "%Y%m%d").strftime("%B %d, %Y")
+    except ValueError:
+        return date_str
+
+def build_llm_markdown_history(history_records, drug_name="OxyContin", cyp_targets=["CYP2D6", "CYP3A4"]):
+    """Step 3: Process history records and build clean Markdown structured for LLM processing."""
+    
+    relevant_sections = {
+        "Clinical Pharmacology": "clinical_pharmacology",
+        "Pharmacokinetics": "pharmacokinetics",
+        "Drug Interactions": "drug_interactions",
+        "Warnings and Precautions": "warnings_and_precautions",
+        "Boxed Warning": "boxed_warning"
+    }
+
+    md = []
+    md.append(f"# Historical Label Timeline & CYP Pharmacology Report: {drug_name.upper()}")
+    md.append(f"**Target Enzymes:** {', '.join(cyp_targets)}")
+    md.append(f"**Total Revisions Processed:** {len(history_records)}")
+    md.append("\n---\n")
+
+    for idx, record in enumerate(history_records, start=1):
+        eff_time = record.get("effective_time", "N/A")
+        readable_date = format_fda_date(eff_time)
+        version_num = record.get("version", "N/A")
+        openfda = record.get("openfda", {})
+        generic_name = openfda.get("generic_name", ["N/A"])[0]
+        
+        md.append(f"## Revision #{idx} ({readable_date})")
+        md.append(f"- **Effective Date:** {eff_time}")
+        md.append(f"- **Version Number:** {version_num}")
+        md.append(f"- **Generic Name:** {generic_name}")
+        md.append("")
+
+        cyp_section_found = False
+
+        for section_title, field_key in relevant_sections.items():
+            if field_key in record:
+                section_text_list = record[field_key]
+                full_text = "\n".join(section_text_list)
+                
+                # Check for target CYP enzyme references
+                matches = [cyp for cyp in cyp_targets if cyp.lower() in full_text.lower()]
+                
+                if matches:
+                    cyp_section_found = True
+                    md.append(f"### Section: {section_title}")
+                    md.append(f"> **Enzymes Mentioned:** {', '.join(matches)}\n")
+                    
+                    # Clean up paragraph formatting for LLM readability
+                    clean_text = full_text.replace("\n", "\n\n")
+                    md.append(clean_text)
+                    md.append("")
+
+        if not cyp_section_found:
+            md.append("> *No targeted CYP mentions found in this revision's pharmacology sections.*\n")
+            
+        md.append("---\n")
+
+    return "\n".join(md)
+
+if __name__ == "__main__":
+    drug = "OxyContin"
+    enzymes = ["CYP2D6", "CYP3A4"]
+    
+    print(f"Retrieving timeline and CYP data for {drug}...")
+    set_id = get_oxycontin_set_id(drug_name=drug)
+    
+    if set_id:
+        history = fetch_label_history(set_id)
+        markdown_output = build_llm_markdown_history(history, drug_name=drug, cyp_targets=enzymes)
+        
+        # Save to Markdown file
+        output_filename = f"{drug.lower()}_cyp_history_timeline.md"
+        with open(output_filename, "w", encoding="utf-8") as f:
+            f.write(markdown_output)
+            
+        print(f"\n[Success] Generated LLM-friendly Markdown report and saved to '{output_filename}'")
+        print("\n--- Snippet of Generated Markdown Output ---\n")
+        print(markdown_output[:1200] + "\n\n...[truncated]...")
+    else:
+        print("Failed to find set_id for drug.")
